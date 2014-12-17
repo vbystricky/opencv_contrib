@@ -181,6 +181,10 @@ public:
                const String& bg_path,
                ICFDetectorParams params = ICFDetectorParams());
 
+    void train(const std::vector<Mat> &samples,
+               int pos_count, int neg_count,
+               ICFDetectorParams params = ICFDetectorParams());
+
     /* Detect object on image
 
         image — image for detection
@@ -207,6 +211,11 @@ private:
     std::vector<std::vector<int> > features_;
     int model_n_rows_;
     int model_n_cols_;
+
+private:
+    void fillLabels(int pos_count, int neg_count, Mat_<int> &labels);
+    void prepareData(const std::vector<Mat> &samples, int features_count, 
+        Ptr<FeatureEvaluator> evaluator, Mat_<int> &data);
 };
 
 CV_EXPORTS void write(FileStorage& fs, String&, const ICFDetector& detector);

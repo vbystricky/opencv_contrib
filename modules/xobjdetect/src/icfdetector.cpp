@@ -63,6 +63,38 @@ namespace cv
 namespace xobjdetect
 {
 
+void ICFDetector::fillLabels(int pos_count, int neg_count, Mat_<int> &labels)
+{
+    labels.create(1, pos_count + neg_count);
+    for( int i = 0; i < pos_count; ++i)
+        labels(0, i) = 1;
+    for( int i = pos_count; i < pos_count + neg_count; ++i )
+        labels(0, i) = -1;
+}
+void ICFDetector::prepareData(const vector<Mat> &samples, int features_count, 
+                              Ptr<FeatureEvaluator> evaluator, Mat_<int> &data)
+{
+    data = Mat_<int>::zeros(features_count, (int)samples.size());
+    Mat_<int> feature_col(1, (int)samples.size());
+
+    vector<Mat> channels;
+    for( int i = 0; i < (int)samples.size(); ++i )
+    {
+        cout << "Samples: " << setw(6) << i << "/" << samples.size() << "\r";
+        computeChannels(samples[i], channels);
+        evaluator->setChannels(channels);
+        //evaluator->assertChannels();
+        evaluator->evaluateAll(feature_col);
+
+        CV_Assert(feature_col.cols == features_count);
+
+        for( int j = 0; j < feature_col.cols; ++j )
+            data(j, i) = feature_col(0, j);
+    }
+    cout << "\n";
+
+}
+
 void ICFDetector::train(const String& pos_path,
                         const String& bg_path,
                         ICFDetectorParams params)
@@ -84,7 +116,7 @@ void ICFDetector::train(const String& pos_path,
 
     for( size_t i = 0; i < pos_filenames.size(); ++i, ++pos_count )
     {
-        cout << setw(6) << (i + 1) << "/" << pos_filenames.size() << "\r";
+        cout << "Positive count: " << setw(6) << (i + 1) << "/" << pos_filenames.size() << "\r";
         Mat img = imread(pos_filenames[i]);
         resize(img, resized_sample, model_size);
         samples.push_back(resized_sample.clone());
@@ -95,7 +127,7 @@ void ICFDetector::train(const String& pos_path,
     RNG rng;
     for( size_t i = 0; i < bg_filenames.size(); ++i )
     {
-        cout << setw(6) << (i + 1) << "/" << bg_filenames.size() << "\r";
+        cout << "Negative count: " << setw(6) << (i + 1) << "/" << bg_filenames.size() << "\r";
         Mat img = imread(bg_filenames[i]);
         for( int j = 0; j < params.bg_per_image; ++j, ++neg_count)
         {
@@ -112,35 +144,24 @@ void ICFDetector::train(const String& pos_path,
     }
     cout << "\n";
 
-    Mat_<int> labels(1, pos_count + neg_count);
-    for( int i = 0; i < pos_count; ++i)
-        labels(0, i) = 1;
-    for( int i = pos_count; i < pos_count + neg_count; ++i )
-        labels(0, i) = -1;
+    train(samples, pos_count, neg_count, params);
+}
 
-    vector<vector<int> > features = generateFeatures(model_size, "icf",
-        params.feature_count);
+void ICFDetector::train(const vector<Mat> &samples,
+                        int pos_count, int neg_count,
+                        ICFDetectorParams params)
+{
+    CV_Assert(pos_count + neg_count <= samples.size());
+    
+    Size model_size(params.model_n_cols, params.model_n_rows);
+    vector<vector<int> > features = generateFeatures(model_size, "icf", params.feature_count);
     Ptr<FeatureEvaluator> evaluator = createFeatureEvaluator(features, "icf");
 
-    Mat_<int> data = Mat_<int>::zeros((int)features.size(), (int)samples.size());
-    Mat_<int> feature_col(1, (int)samples.size());
+    Mat_<int> data;
+    prepareData(samples, (int)features.size(), evaluator, data);
 
-    vector<Mat> channels;
-    for( int i = 0; i < (int)samples.size(); ++i )
-    {
-        cout << setw(6) << i << "/" << samples.size() << "\r";
-        computeChannels(samples[i], channels);
-        evaluator->setChannels(channels);
-        //evaluator->assertChannels();
-        evaluator->evaluateAll(feature_col);
-
-        CV_Assert(feature_col.cols == (int)features.size());
-
-        for( int j = 0; j < feature_col.cols; ++j )
-            data(j, i) = feature_col(0, j);
-    }
-    cout << "\n";
-    samples.clear();
+    Mat_<int> labels;
+    fillLabels(pos_count, neg_count, labels);
 
     WaldBoostParams wparams;
     wparams.weak_count = params.weak_count;

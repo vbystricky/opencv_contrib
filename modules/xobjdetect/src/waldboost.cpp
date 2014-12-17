@@ -148,9 +148,9 @@ vector<int> WaldBoostImpl::train(const Mat& data_, const Mat& labels_)
     labels_.copyTo(labels);
 
     bool null_data = true;
-    for( int row = 0; row < data.rows; ++row )
+    for( int row = 0; (row < data.rows && null_data); ++row )
     {
-        for( int col = 0; col < data.cols; ++col )
+        for( int col = 0; (col < data.cols && null_data); ++col )
             if( data.at<int>(row, col) )
                 null_data = false;
     }
